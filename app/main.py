@@ -1,6 +1,6 @@
 from flask import Flask
 from flask import request, render_template, redirect, url_for, session, flash
-import mysql.connector
+from flaskext.mysql import MySQL
 from dotenv import load_dotenv
 import os
 import traceback
@@ -11,14 +11,33 @@ import hashlib
 load_dotenv()
 
 class Server:
-    def __init__(self):
-        self.mydb = mysql.connector.connect(
-            host='localhost',
-            user=os.getenv("MYSQL_USERNAME"),
-            password=os.getenv("MYSQL_PASSWORD"),
-            database=os.getenv("MYSQL_DATABASE")
-        )
-        self.cursor = self.mydb.cursor()
+    def __init__(self, mysql):
+        # self.mydb = mysql.connector.connect(
+        #     host='localhost',
+        #     user=os.getenv("MYSQL_USERNAME"),
+        #     password=os.getenv("MYSQL_PASSWORD"),
+        #     port=os.getenv("MYSQL_PORT"),
+        #     database=os.getenv("MYSQL_DATABASE")
+        # )
+        # config = {
+        #     host: 'db',
+        #     user: "root",
+        #     password: "root",
+        #     port: '3306',
+        #     database: 'classforma'
+        # }
+        # self.mydb = mysql.connector.connect(
+        #     **config
+        # )
+        # self.mydb = mysql.connector.connect(
+        #     host='db',
+        #     user='root',
+        #     password='root',
+        #     port='3306',
+        #     database='classforma'
+        # )
+        self.conn = mysql.connect()
+        self.cursor = self.conn.cursor()
 
     def create_a_user(self, username, password):
         try:
@@ -32,10 +51,12 @@ class Server:
             val = (username, final_password, random_pos)
 
             self.cursor.execute(sql, val)
-            self.mydb.commit()
-        except mysql.connector.errors.IntegrityError:
-            print("oops")
-            raise Exception("User exists")
+            self.conn.commit()
+        except:
+            raise Exception("User exists") # hacky fix
+        # except mysql.connector.errors.IntegrityError: # error would occur when using mysql connector, this was the way to check if a user existed or not
+        #     print("oops")
+        #     raise Exception("User exists")
 
 
     def does_user_exist(self, username, password):
@@ -68,7 +89,14 @@ class Server:
 
 app = Flask(__name__)
 app.secret_key = os.getenv("APPSECRETKEY")
-instance = Server()
+
+mysql = MySQL()
+app.config['MYSQL_DATABASE_USER'] = 'root'
+app.config['MYSQL_DATABASE_PASSWORD'] = 'root'
+app.config['MYSQL_DATABASE_DB'] = 'classforma'
+app.config['MYSQL_DATABASE_HOST'] = 'db'
+mysql.init_app(app)
+instance = Server(mysql)
 
 @app.route('/')
 def home_page():
@@ -96,7 +124,7 @@ def create_user():
             instance.create_a_user(username, password)
             flash('user created')
         except Exception as e:
-            if e.args[0] == "User exists":
+            if e.args[0] == "User exists": # this was for mysql connector not included with flask
                 return render_template("home_page.html", error="User already exists!")
             else:
                 traceback.print_exc()
@@ -121,4 +149,4 @@ def list_users():
 # def delete_user():
 #     return instance.delete_a_user()
 
-app.run(debug=True, port=8000)
+app.run(host='0.0.0.0', debug=True, port=8000)
